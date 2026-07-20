@@ -32,31 +32,6 @@ function o(store: string, bso: number, mp: number): StoreOrder {
   }
 }
 
-const SEED: CalendarData = {
-  '2026-07-01': [o('Bozeman', 2, 1), o('Spokane', 3, 2), o('Helena', 1, 1)],
-  '2026-07-02': [o('Missoula', 2, 2), o('Great Falls', 1, 1)],
-  '2026-07-03': [o('Billings', 3, 1), o('Spokane', 2, 2), o('Bozeman', 1, 1)],
-  '2026-07-06': [o('Helena', 2, 1), o('Missoula', 1, 2)],
-  '2026-07-07': [o('Bozeman', 3, 2), o('Great Falls', 2, 1), o('Billings', 1, 1)],
-  '2026-07-08': [o('Spokane', 2, 2), o('Helena', 3, 1)],
-  '2026-07-09': [o('Missoula', 1, 1), o('Bozeman', 2, 2), o('Great Falls', 3, 1)],
-  '2026-07-10': [o('Billings', 2, 1), o('Spokane', 1, 2)],
-  '2026-07-13': [o('Bozeman', 3, 1), o('Helena', 2, 2)],
-  '2026-07-14': [o('Great Falls', 1, 1), o('Missoula', 2, 1), o('Spokane', 3, 2)],
-  '2026-07-15': [o('Billings', 1, 1), o('Bozeman', 2, 2)],
-  '2026-07-16': [o('Helena', 3, 2), o('Great Falls', 2, 1), o('Missoula', 1, 1)],
-  '2026-07-17': [o('Spokane', 2, 1), o('Billings', 3, 2)],
-  '2026-07-20': [o('Bozeman', 1, 2), o('Helena', 2, 1)],
-  '2026-07-21': [o('Missoula', 3, 1), o('Great Falls', 1, 2), o('Spokane', 2, 1)],
-  '2026-07-22': [o('Billings', 2, 2), o('Bozeman', 3, 1)],
-  '2026-07-23': [o('Helena', 1, 1), o('Missoula', 2, 2), o('Great Falls', 3, 1)],
-  '2026-07-24': [o('Spokane', 1, 1), o('Billings', 2, 2)],
-  '2026-07-27': [o('Bozeman', 2, 1), o('Helena', 3, 2), o('Great Falls', 1, 1)],
-  '2026-07-28': [o('Missoula', 1, 2), o('Spokane', 2, 1)],
-  '2026-07-29': [o('Billings', 3, 1), o('Bozeman', 2, 2), o('Helena', 1, 1)],
-  '2026-07-30': [o('Great Falls', 2, 1), o('Missoula', 3, 2)],
-  '2026-07-31': [o('Spokane', 1, 1), o('Billings', 2, 1), o('Bozeman', 3, 2)],
-}
 
 // ─── Calendar Helpers ─────────────────────────────────────────────────────────
 
