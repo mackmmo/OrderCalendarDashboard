@@ -1,0 +1,10 @@
+{
+  "description": "Displays a detailed order calendar by store and product with real-time quantity tracking and status updates to streamline order management.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
