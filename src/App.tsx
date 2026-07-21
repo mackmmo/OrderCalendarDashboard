@@ -1,10 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import {
+  getSalesOrders,
+  updateSalesOrder,
+} from './api/orders'
+import {
+  transformOrders,
+  type CalendarData,
+} from './utils/TransformOrders'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Qty {
   ordered: number
   done: number
+  orderId: number | null
 }
 
 interface StoreOrder {
@@ -15,23 +24,6 @@ interface StoreOrder {
   finishedAt: Date | null
   shippedAt: Date | null
 }
-
-type CalendarData = Record<string, StoreOrder[]>
-
-// ─── Seed Data ────────────────────────────────────────────────────────────────
-
-let _uid = 0
-function o(store: string, bso: number, mp: number): StoreOrder {
-  return {
-    id: String(++_uid),
-    store,
-    bso: { ordered: bso, done: 0 },
-    mp: { ordered: mp, done: 0 },
-    finishedAt: null,
-    shippedAt: null,
-  }
-}
-
 
 // ─── Calendar Helpers ─────────────────────────────────────────────────────────
 
@@ -168,23 +160,67 @@ function StatusToggle({
 
 function OrderCard({
   order,
-  onUpdate,
+  onFinishedQuantityChange,
+  onFinishedChange,
+  onShippedChange,
 }: {
   order: StoreOrder
-  onUpdate: (updated: StoreOrder) => void
+
+  onFinishedQuantityChange: (
+    orderId: number,
+    quantity: number,
+  ) => Promise<void>
+
+  onFinishedChange: (
+    order: StoreOrder,
+    finished: boolean,
+  ) => Promise<void>
+
+  onShippedChange: (
+    order: StoreOrder,
+    shipped: boolean,
+  ) => Promise<void>
 }) {
-  function setBsoDone(v: number) {
-    onUpdate({ ...order, bso: { ...order.bso, done: v } })
+
+  async function setBsoDone(quantity: number) {
+  if (order.bso.orderId === null) {
+    return
   }
-  function setMpDone(v: number) {
-    onUpdate({ ...order, mp: { ...order.mp, done: v } })
+
+  await onFinishedQuantityChange(
+    order.bso.orderId,
+    quantity,
+  )
+}
+
+async function setMpDone(quantity: number) {
+  if (order.mp.orderId === null) {
+    return
   }
-  function toggleFinished() {
-    onUpdate({ ...order, finishedAt: order.finishedAt ? null : new Date() })
-  }
-  function toggleShipped() {
-    onUpdate({ ...order, shippedAt: order.shippedAt ? null : new Date() })
-  }
+
+  await onFinishedQuantityChange(
+    order.mp.orderId,
+    quantity,
+  )
+}
+
+  async function toggleFinished() {
+  const nextFinished = !order.finishedAt
+
+  await onFinishedChange(
+    order,
+    nextFinished,
+  )
+}
+
+async function toggleShipped() {
+  const nextShipped = !order.shippedAt
+
+  await onShippedChange(
+    order,
+    nextShipped,
+  )
+}
 
   const totalOrdered = order.bso.ordered + order.mp.ordered
   const totalDone = order.bso.done + order.mp.done
@@ -237,7 +273,13 @@ function OrderCard({
             </div>
             <div className="flex items-center gap-3">
               <span className="text-xs text-stone-400">Done</span>
-              <Stepper value={order.bso.done} max={order.bso.ordered} onChange={setBsoDone} />
+              <Stepper
+                value={order.bso.done}
+                max={order.bso.ordered}
+                onChange={(value) => {
+                void setBsoDone(value)
+              }}
+              />
             </div>
           </div>
         </div>
@@ -258,7 +300,13 @@ function OrderCard({
             </div>
             <div className="flex items-center gap-3">
               <span className="text-xs text-stone-400">Done</span>
-              <Stepper value={order.mp.done} max={order.mp.ordered} onChange={setMpDone} />
+              <Stepper
+                value={order.mp.done}
+                max={order.mp.ordered}
+                onChange={(value) => {
+                void setMpDone(value)
+              }}
+              />
             </div>
           </div>
         </div>
@@ -348,21 +396,40 @@ function DayCell({
       <div className="space-y-1">
         {orders.map((ord) => (
           <div key={ord.id} className="flex items-baseline gap-0" style={{ lineHeight: '1.3' }}>
-            <span
-              className={`text-[10px] font-medium truncate flex-1 ${
-                selected ? 'text-stone-300' : 'text-stone-600'
-              }`}
-              style={{ fontFamily: 'Barlow Condensed, sans-serif', maxWidth: 70 }}
-            >
-              {ord.store}
-            </span>
+<span
+  className={`text-[10px] font-medium truncate flex-1 ${
+    selected ? 'text-stone-300' : 'text-stone-600'
+  } ${ord.shippedAt ? 'line-through opacity-50' : ''}`}
+  style={{
+    fontFamily: 'Barlow Condensed, sans-serif',
+    maxWidth: 90,
+  }}
+>
+  {ord.finishedAt && !ord.shippedAt && (
+    <span
+      className={`mr-1 ${
+        selected ? 'text-green-300' : 'text-green-700'
+      }`}
+      aria-label="Order finished"
+    >
+      ✓
+    </span>
+  )}
+
+  {ord.store}
+</span>
             <span
               className={`text-[9px] tabular-nums flex-shrink-0 ml-1 ${
                 selected ? 'text-stone-500' : 'text-stone-400'
               }`}
               style={{ fontFamily: 'DM Mono, monospace' }}
             >
-              B{ord.bso.ordered} M{ord.mp.ordered}
+              {[
+                ord.bso.ordered > 0 ? `B${ord.bso.ordered}` : null,
+                ord.mp.ordered > 0 ? `M${ord.mp.ordered}` : null,
+            ]
+                .filter(Boolean)
+                .join(' ')}
             </span>
           </div>
         ))}
@@ -376,11 +443,27 @@ function DayCell({
 function DetailPanel({
   selectedKey,
   orders,
-  onUpdateOrder,
+  onFinishedQuantityChange,
+  onFinishedChange,
+  onShippedChange,
 }: {
   selectedKey: string | null
   orders: CalendarData
-  onUpdateOrder: (key: string, updated: StoreOrder) => void
+
+  onFinishedQuantityChange: (
+    orderId: number,
+    quantity: number,
+  ) => Promise<void>
+
+  onFinishedChange: (
+    order: StoreOrder,
+    finished: boolean,
+  ) => Promise<void>
+
+  onShippedChange: (
+    order: StoreOrder,
+    shipped: boolean,
+  ) => Promise<void>
 }) {
   if (!selectedKey) {
     return (
@@ -493,8 +576,12 @@ function DetailPanel({
             <OrderCard
               key={ord.id}
               order={ord}
-              onUpdate={(updated) => onUpdateOrder(selectedKey, updated)}
-            />
+              onFinishedQuantityChange={
+                onFinishedQuantityChange
+              }
+              onFinishedChange={onFinishedChange}
+              onShippedChange={onShippedChange}
+            />  
           ))
         )}
       </div>
@@ -502,182 +589,161 @@ function DetailPanel({
   )
 }
 
-// ─── Stock Panel ─────────────────────────────────────────────────────────────
-
-function StockPanel({
-  orders,
-  stock,
-  onStockChange,
-}: {
-  orders: CalendarData
-  stock: { bso: number; mp: number }
-  onStockChange: (updated: { bso: number; mp: number }) => void
-}) {
-  const reservedBso = Object.values(orders).flat().reduce((s, o) => s + o.bso.ordered, 0)
-  const reservedMp = Object.values(orders).flat().reduce((s, o) => s + o.mp.ordered, 0)
-  const remainBso = stock.bso - reservedBso
-  const remainMp = stock.mp - reservedMp
-
-  function bump(product: 'bso' | 'mp', delta: number) {
-    onStockChange({ ...stock, [product]: Math.max(0, stock[product] + delta) })
-  }
-
-  return (
-    <div
-      className="flex-shrink-0 border-b px-6 py-0"
-      style={{ borderColor: '#E0DDD8', backgroundColor: '#FFFFFF' }}
-    >
-      <div className="flex items-stretch divide-x" style={{ borderColor: '#E0DDD8' }}>
-        {/* Label */}
-        <div className="flex items-center pr-5 py-3">
-          <span
-            className="text-xs text-stone-400 uppercase tracking-widest"
-            style={{ fontFamily: 'DM Mono, monospace' }}
-          >
-            Pseudo-Stock
-          </span>
-        </div>
-
-        {/* BSO */}
-        <div className="flex items-center gap-6 px-6 py-3">
-          <span
-            className="text-xs font-medium text-stone-500 uppercase tracking-widest w-6"
-            style={{ fontFamily: 'DM Mono, monospace' }}
-          >
-            BSO
-          </span>
-          <StockStat label="Available" value={stock.bso} />
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => bump('bso', -1)}
-              disabled={stock.bso === 0}
-              className="w-5 h-5 border border-stone-200 text-stone-400 hover:bg-stone-50 disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center text-xs leading-none transition-colors"
-              style={{ fontFamily: 'DM Mono, monospace' }}
-            >
-              −
-            </button>
-            <button
-              onClick={() => bump('bso', 1)}
-              className="w-5 h-5 border border-stone-200 text-stone-400 hover:bg-stone-50 flex items-center justify-center text-xs leading-none transition-colors"
-              style={{ fontFamily: 'DM Mono, monospace' }}
-            >
-              +
-            </button>
-          </div>
-          <StockStat label="Reserved" value={reservedBso} />
-          <StockStat
-            label="Remaining"
-            value={remainBso}
-            warn={remainBso < 0}
-          />
-        </div>
-
-        {/* MP */}
-        <div className="flex items-center gap-6 px-6 py-3">
-          <span
-            className="text-xs font-medium text-stone-500 uppercase tracking-widest w-6"
-            style={{ fontFamily: 'DM Mono, monospace' }}
-          >
-            MP
-          </span>
-          <StockStat label="Available" value={stock.mp} />
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => bump('mp', -1)}
-              disabled={stock.mp === 0}
-              className="w-5 h-5 border border-stone-200 text-stone-400 hover:bg-stone-50 disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center text-xs leading-none transition-colors"
-              style={{ fontFamily: 'DM Mono, monospace' }}
-            >
-              −
-            </button>
-            <button
-              onClick={() => bump('mp', 1)}
-              className="w-5 h-5 border border-stone-200 text-stone-400 hover:bg-stone-50 flex items-center justify-center text-xs leading-none transition-colors"
-              style={{ fontFamily: 'DM Mono, monospace' }}
-            >
-              +
-            </button>
-          </div>
-          <StockStat label="Reserved" value={reservedMp} />
-          <StockStat
-            label="Remaining"
-            value={remainMp}
-            warn={remainMp < 0}
-          />
-        </div>
-
-        {/* Costco note */}
-        <div className="flex items-center px-6 py-3 ml-auto">
-          <span
-            className="text-xs text-stone-300 italic"
-            style={{ fontFamily: 'DM Sans, sans-serif' }}
-          >
-            Costco orders ~2 wks out
-          </span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function StockStat({
-  label,
-  value,
-  warn,
-}: {
-  label: string
-  value: number
-  warn?: boolean
-}) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span
-        className="text-[9px] text-stone-400 uppercase tracking-widest leading-none"
-        style={{ fontFamily: 'DM Mono, monospace' }}
-      >
-        {label}
-      </span>
-      <span
-        className={`text-sm font-medium tabular-nums leading-none ${
-          warn ? 'text-stone-900 underline decoration-dotted underline-offset-2' : 'text-stone-700'
-        }`}
-        style={{ fontFamily: 'DM Mono, monospace' }}
-      >
-        {value < 0 ? `−${Math.abs(value)}` : value}
-      </span>
-    </div>
-  )
-}
-
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [orders, setOrders] = useState<CalendarData>(SEED)
-  const [selectedKey, setSelectedKey] = useState<string | null>('2026-07-15')
+  const [orders, setOrders] = useState<CalendarData>({})
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [month, setMonth] = useState({ year: 2026, month: 6 })
-  const [stock, setStock] = useState({ bso: 48, mp: 31 })
+
+  async function reloadOrders() {
+    try {
+      const apiOrders = await getSalesOrders()
+      const calendarData = transformOrders(apiOrders)
+
+      setOrders(calendarData)
+
+      const firstDateKey = Object.keys(calendarData).sort()[0]
+
+      if (firstDateKey && !selectedKey) {
+        setSelectedKey(firstDateKey)
+
+        const [year, monthNumber] = firstDateKey
+          .split('-')
+          .map(Number)
+
+        setMonth({
+          year,
+          month: monthNumber - 1,
+        })
+      }
+    } catch (error) {
+      console.error('Failed to load orders:', error)
+    }
+  }
+
+  useEffect(() => {
+    void reloadOrders()
+  }, [])
+
+  async function setStoreFinished(
+    order: StoreOrder,
+    finished: boolean,
+  ) {
+    const orderIds = [
+      order.bso.orderId,
+      order.mp.orderId,
+    ].filter(
+      (id): id is number => id !== null,
+    )
+
+    try {
+      await Promise.all(
+        orderIds.map((orderId) =>
+          updateSalesOrder(orderId, {
+            finished,
+          }),
+        ),
+      )
+
+      await reloadOrders()
+    } catch (error) {
+      console.error(
+        'Failed to update finished status:',
+        error,
+      )
+    }
+  }
+  async function setFinishedQuantity(
+    orderId: number,
+    quantity: number,
+  ) {
+
+    try {
+      await updateSalesOrder(orderId, {
+        qty_finished: quantity,
+    })
+
+    await reloadOrders()
+  } catch (error) {
+    console.error(
+      'Failed to update finished quantity:',
+      error,
+      )
+    }
+  }
+
+  async function setStoreShipped(
+    order: StoreOrder,
+    shipped: boolean,
+  ) {
+    const orderIds = [
+      order.bso.orderId,
+      order.mp.orderId,
+    ].filter(
+      (id): id is number => id !== null,
+    )
+
+    try {
+      await Promise.all(
+        orderIds.map((orderId) =>
+          updateSalesOrder(orderId, {
+            shipped,
+          }),
+        ),
+      )
+
+      await reloadOrders()
+    } catch (error) {
+      console.error(
+        'Failed to update shipped status:',
+        error,
+      )
+    }
+  }
 
   const today = toKey(new Date())
   const weeks = getWeeks(month.year, month.month)
 
-  function updateOrder(dateKey: string, updated: StoreOrder) {
-    setOrders((prev) => ({
-      ...prev,
-      [dateKey]: prev[dateKey].map((o) => (o.id === updated.id ? updated : o)),
+  function updateOrder(
+    dateKey: string,
+    updated: StoreOrder,
+  ) {
+    setOrders((previous) => ({
+      ...previous,
+      [dateKey]: previous[dateKey].map((order) =>
+        order.id === updated.id ? updated : order,
+      ),
     }))
   }
 
   function prevMonth() {
-    setMonth((m) => {
-      const d = new Date(m.year, m.month - 1, 1)
-      return { year: d.getFullYear(), month: d.getMonth() }
+    setMonth((currentMonth) => {
+      const date = new Date(
+        currentMonth.year,
+        currentMonth.month - 1,
+        1,
+      )
+
+      return {
+        year: date.getFullYear(),
+        month: date.getMonth(),
+      }
     })
   }
 
   function nextMonth() {
-    setMonth((m) => {
-      const d = new Date(m.year, m.month + 1, 1)
-      return { year: d.getFullYear(), month: d.getMonth() }
+    setMonth((currentMonth) => {
+      const date = new Date(
+        currentMonth.year,
+        currentMonth.month + 1,
+        1,
+      )
+
+      return {
+        year: date.getFullYear(),
+        month: date.getMonth(),
+      }
     })
   }
 
@@ -731,9 +797,6 @@ export default function App() {
           </button>
         </div>
       </header>
-
-      {/* Stock Panel */}
-      <StockPanel orders={orders} stock={stock} onStockChange={setStock} />
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
@@ -791,11 +854,15 @@ export default function App() {
 
         {/* Detail Panel */}
         <div className="w-96 flex-shrink-0 overflow-hidden flex flex-col">
-          <DetailPanel
-            selectedKey={selectedKey}
-            orders={orders}
-            onUpdateOrder={updateOrder}
-          />
+        <DetailPanel
+          selectedKey={selectedKey}
+          orders={orders}
+          onFinishedQuantityChange={
+            setFinishedQuantity
+          }
+          onFinishedChange={setStoreFinished}
+          onShippedChange={setStoreShipped}
+        />
         </div>
       </div>
     </div>
