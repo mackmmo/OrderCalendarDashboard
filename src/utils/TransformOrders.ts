@@ -24,7 +24,7 @@ export interface StoreOrder {
   id: string
   store: string
   bso: Qty
-  mp: Qty
+  fourPack: Qty
   finishedAt: Date | null
   shippedAt: Date | null
 }
@@ -72,7 +72,7 @@ export function transformOrders(
           orderId: null,
         },
 
-        mp: {
+        fourPack: {
           ordered: 0,
           done: 0,
           orderId: null,
@@ -92,7 +92,7 @@ export function transformOrders(
         orderId: apiOrder.sales_order_id,
       }
     } else if (item === 'MP') {
-      storeOrder.mp = {
+      storeOrder.fourPack = {
         ordered: apiOrder.qty_ordered,
         done: apiOrder.qty_finished,
         orderId: apiOrder.sales_order_id,
@@ -104,7 +104,7 @@ export function transformOrders(
     }
 
     /*
-     * A store card can represent both a BSO row and an MP row.
+     * A store card can represent both a BSO row and an fourPack row.
      * For display purposes, use whichever timestamp is present/latest.
      */
     const finishedAt = parseTimestamp(

@@ -1,12 +1,14 @@
 // src/api/orders.ts
+// assign API_URL from environment variable
+const API_URL = import.meta.env.VITE_API_URL 
 
-const API_URL = import.meta.env.VITE_API_URL
-
+// throw an error if API_URL is not set
 if (!API_URL) {
-  throw new Error('VITE_API_URL is not configured')
+  throw new Error('VITE_API_URL is not configured') 
 }
-
-export interface ApiSalesOrder {
+// every sales order has the following fields, which are returned by the API
+// defines the naming convention for the API response and data types used in the frontend
+export interface ApiSalesOrder { 
   sales_order_id: number
   sales_order_number: number
   store_name: string
@@ -22,35 +24,19 @@ export interface ApiSalesOrder {
   shipped_time_stamp: string | null
 }
 
-export interface CreateSalesOrderInput {
-  sales_order_number: number
-  store_name: string
-  item: 'BSO' | 'MP'
-  qty_ordered: number
-  qty_finished?: number
-  qty_shipped?: number
+// defines the input for updating a sales order, which can include finished, shipped, qty_finished, and qty_shipped fields
+// these are the fields that can be updated by the frontend, and the backend will handle updating the corresponding timestamps based on these fields
+export interface UpdateSalesOrderInput {
   finished?: boolean
   shipped?: boolean
-  sales_order_date: string
-  ship_date: string
+  qty_finished?: number
+  qty_shipped?: number
 }
 
-export type UpdateSalesOrderInput = Partial<
-  Pick<
-    ApiSalesOrder,
-    | 'sales_order_number'
-    | 'store_name'
-    | 'item'
-    | 'qty_ordered'
-    | 'qty_finished'
-    | 'qty_shipped'
-    | 'finished'
-    | 'shipped'
-    | 'sales_order_date'
-    | 'ship_date'
-  >
->
-
+// Helper function to get error message from response
+// No response body: return status code and status text
+// Response body is JSON: return stringified JSON
+// Response body is not JSON: return raw text
 async function getErrorMessage(response: Response): Promise<string> {
   const body = await response.text()
 
@@ -66,6 +52,9 @@ async function getErrorMessage(response: Response): Promise<string> {
   }
 }
 
+// Gather sales orders from the API and return them as an array of ApiSalesOrder objects. 
+// If the response is not ok, throw an error with the error message from the response. 
+// If the response body is not an array, throw an error with a message indicating that the response body is not an array.
 export async function getSalesOrders(): Promise<ApiSalesOrder[]> {
   const response = await fetch(`${API_URL}/sales-orders/`)
 
@@ -76,60 +65,16 @@ export async function getSalesOrders(): Promise<ApiSalesOrder[]> {
   }
 
   const data: unknown = await response.json()
-
-  // Supports either a plain array or a paginated DRF response.
-  if (Array.isArray(data)) {
-    return data as ApiSalesOrder[]
+  
+  if (!Array.isArray(data)) {
+    throw new Error('Failed to load sales orders: `${await getErrorMessage(response)}`')
   }
 
-  if (
-    typeof data === 'object' &&
-    data !== null &&
-    'results' in data &&
-    Array.isArray((data as { results: unknown }).results)
-  ) {
-    return (data as { results: ApiSalesOrder[] }).results
-  }
-
-  throw new Error('Unexpected sales-order response format')
+  return data as ApiSalesOrder[]
 }
 
-export async function getSalesOrder(
-  orderId: number,
-): Promise<ApiSalesOrder> {
-  const response = await fetch(
-    `${API_URL}/sales-orders/${orderId}/`,
-  )
-
-  if (!response.ok) {
-    throw new Error(
-      `Failed to load sales order: ${await getErrorMessage(response)}`,
-    )
-  }
-
-  return response.json()
-}
-
-export async function createSalesOrder(
-  order: CreateSalesOrderInput,
-): Promise<ApiSalesOrder> {
-  const response = await fetch(`${API_URL}/sales-orders/`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(order),
-  })
-
-  if (!response.ok) {
-    throw new Error(
-      `Failed to create sales order: ${await getErrorMessage(response)}`,
-    )
-  }
-
-  return response.json()
-}
-
+// Update a sales order with the given changes and return the updated ApiSalesOrder object.
+// If the response is not ok, throw an error with the error message from the response.
 export async function updateSalesOrder(
   orderId: number,
   changes: UpdateSalesOrderInput,
@@ -154,6 +99,8 @@ export async function updateSalesOrder(
   return response.json()
 }
 
+// Delete a sales order with the given orderId. 
+// If the response is not ok, throw an error with the error message from the response.
 export async function deleteSalesOrder(
   orderId: number,
 ): Promise<void> {
@@ -183,6 +130,7 @@ export async function deleteSalesOrder(
  * shipped: false  -> shipped_time_stamp = null
  */
 
+// Mark a sales order as finished by setting the finished field to true.
 export function markOrderFinished(
   orderId: number,
 ): Promise<ApiSalesOrder> {
@@ -191,6 +139,7 @@ export function markOrderFinished(
   })
 }
 
+// Mark a sales order as not finished by setting the finished field to false.
 export function undoOrderFinished(
   orderId: number,
 ): Promise<ApiSalesOrder> {
@@ -199,6 +148,7 @@ export function undoOrderFinished(
   })
 }
 
+// Mark a sales order as shipped by setting the shipped field to true.
 export function markOrderShipped(
   orderId: number,
 ): Promise<ApiSalesOrder> {
@@ -207,6 +157,7 @@ export function markOrderShipped(
   })
 }
 
+// Mark a sales order as not shipped by setting the shipped field to false.
 export function undoOrderShipped(
   orderId: number,
 ): Promise<ApiSalesOrder> {
@@ -215,6 +166,7 @@ export function undoOrderShipped(
   })
 }
 
+// Update the finished quantity of a sales order by setting the qty_finished field to the given value.
 export function updateFinishedQuantity(
   orderId: number,
   qtyFinished: number,
@@ -224,6 +176,7 @@ export function updateFinishedQuantity(
   })
 }
 
+// Update the shipped quantity of a sales order by setting the qty_shipped field to the given value.
 export function updateShippedQuantity(
   orderId: number,
   qtyShipped: number,

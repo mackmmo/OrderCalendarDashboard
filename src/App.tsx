@@ -1,12 +1,6 @@
 import { useEffect, useState } from 'react'
-import {
-  getSalesOrders,
-  updateSalesOrder,
-} from './api/orders'
-import {
-  transformOrders,
-  type CalendarData,
-} from './utils/TransformOrders'
+import {getSalesOrders,updateSalesOrder,} from './api/orders'
+import {transformOrders, type CalendarData,} from './utils/TransformOrders'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -20,58 +14,132 @@ interface StoreOrder {
   id: string
   store: string
   bso: Qty
-  mp: Qty
+  fourPack: Qty
   finishedAt: Date | null
   shippedAt: Date | null
 }
 
+export interface ProductTotals {
+  ordered: number
+  finished: number
+  remaining: number
+}
+
+export interface WeeklyTotals {
+  bso: ProductTotals
+  fourPack: ProductTotals
+  totalOrdered: number
+  totalFinished: number
+  totalRemaining: number
+}
 // ─── Calendar Helpers ─────────────────────────────────────────────────────────
 
 function toKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function getWeeks(year: number, month: number): (Date | null)[][] {
-  const weeks: (Date | null)[][] = []
-  const total = new Date(year, month + 1, 0).getDate()
-  let week: (Date | null)[] = Array(5).fill(null)
-  let filled = false
+function getWeeks(
+  year: number,
+  month: number,
+): Date[][] {
+  const firstDayOfMonth = new Date(year, month, 1)
+  const lastDayOfMonth = new Date(year, month + 1, 0)
 
-  for (let d = 1; d <= total; d++) {
-    const date = new Date(year, month, d)
-    const dow = date.getDay()
-    if (dow === 0 || dow === 6) continue
-    const col = dow - 1
-    if (col === 0 && filled) {
-      weeks.push(week)
-      week = Array(5).fill(null)
-      filled = false
+  // Move backward to the Monday of the week
+  // containing the first day of the month.
+  const startDate = new Date(firstDayOfMonth)
+  const firstDayOfWeek = firstDayOfMonth.getDay()
+
+  const daysBackToMonday =
+    firstDayOfWeek === 0
+      ? 6
+      : firstDayOfWeek - 1
+
+  startDate.setDate(
+    firstDayOfMonth.getDate() - daysBackToMonday,
+  )
+
+  // Move forward to the Friday of the week
+  // containing the last day of the month.
+  const endDate = new Date(lastDayOfMonth)
+  const lastDayOfWeek = lastDayOfMonth.getDay()
+
+  const daysForwardToFriday =
+    lastDayOfWeek === 0
+      ? 5
+      : lastDayOfWeek === 6
+        ? 6
+        : 5 - lastDayOfWeek
+
+  endDate.setDate(
+    lastDayOfMonth.getDate() + daysForwardToFriday,
+  )
+
+  const weeks: Date[][] = []
+  let currentDate = new Date(startDate)
+
+  while (currentDate <= endDate) {
+    const week: Date[] = []
+
+    for (let dayIndex = 0; dayIndex < 5; dayIndex++) {
+      week.push(new Date(currentDate))
+      currentDate.setDate(currentDate.getDate() + 1)
     }
-    week[col] = date
-    filled = true
-    if (col === 4) {
-      weeks.push(week)
-      week = Array(5).fill(null)
-      filled = false
-    }
+
+    weeks.push(week)
+
+    // Skip Saturday and Sunday.
+    currentDate.setDate(currentDate.getDate() + 2)
   }
-  if (filled) weeks.push(week)
+
   return weeks
 }
 
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+const DAY_LABELS = [
+  'Mon',
+  'Tue',
+  'Wed',
+  'Thu',
+  'Fri',
+  'Totals',
 ]
 
-function fmtTime(d: Date) {
-  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+]
+
+function fmtTime(date: Date) {
+  return date.toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  })
 }
 
-function fmtLongDate(d: Date) {
-  const dow = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()]
-  return `${dow}, ${MONTH_NAMES[d.getMonth()]} ${d.getDate()}`
+function fmtLongDate(date: Date) {
+  const dayName = [
+    'Sunday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+  ][date.getDay()]
+
+  return `${dayName}, ${
+    MONTH_NAMES[date.getMonth()]
+  } ${date.getDate()}`
 }
 
 // ─── Stepper ──────────────────────────────────────────────────────────────────
@@ -112,7 +180,54 @@ function Stepper({
     </div>
   )
 }
+// ─── Analytics types and functions ───────────────────────────────────────────
 
+export function calculateWeeklyTotals(
+  orders: StoreOrder[],
+): WeeklyTotals {
+  const totals: WeeklyTotals = {
+    bso: {
+      ordered: 0,
+      finished: 0,
+      remaining: 0,
+    },
+    
+    fourPack: {
+      ordered: 0,
+      finished: 0,
+      remaining: 0,
+    },
+
+    totalOrdered: 0,
+    totalFinished: 0,
+    totalRemaining: 0,
+  }
+
+  for (const order of orders) {
+    totals.bso.ordered += order.bso.ordered
+    totals.bso.finished += order.bso.done
+
+    totals.fourPack.ordered += order.fourPack.ordered
+    totals.fourPack.finished += order.fourPack.done
+  }
+
+  totals.bso.remaining =
+    totals.bso.ordered - totals.bso.finished
+
+  totals.fourPack.remaining =
+    totals.fourPack.ordered - totals.fourPack.finished
+
+  totals.totalOrdered =
+    totals.bso.ordered + totals.fourPack.ordered
+
+  totals.totalFinished =
+    totals.bso.finished + totals.fourPack.finished
+
+  totals.totalRemaining =
+    totals.bso.remaining + totals.fourPack.remaining
+
+  return totals
+}
 // ─── Status Toggle ────────────────────────────────────────────────────────────
 
 function StatusToggle({
@@ -193,13 +308,13 @@ function OrderCard({
   )
 }
 
-async function setMpDone(quantity: number) {
-  if (order.mp.orderId === null) {
+async function setFourPackDone(quantity: number) {
+  if (order.fourPack.orderId === null) {
     return
   }
 
   await onFinishedQuantityChange(
-    order.mp.orderId,
+    order.fourPack.orderId,
     quantity,
   )
 }
@@ -222,8 +337,8 @@ async function toggleShipped() {
   )
 }
 
-  const totalOrdered = order.bso.ordered + order.mp.ordered
-  const totalDone = order.bso.done + order.mp.done
+  const totalOrdered = order.bso.ordered + order.fourPack.ordered
+  const totalDone = order.bso.done + order.fourPack.done
   const allDone = totalDone === totalOrdered
 
   return (
@@ -255,62 +370,80 @@ async function toggleShipped() {
         </span>
       </div>
 
+
       {/* Product rows */}
-      <div className="divide-y" style={{ borderColor: '#F0EDE8' }}>
-        {/* BSO */}
-        <div className="px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span
-                className="text-xs font-medium tracking-widest text-stone-500 uppercase w-8"
-                style={{ fontFamily: 'DM Mono, monospace' }}
-              >
-                BSO
-              </span>
-              <span className="text-xs text-stone-400">
-                {order.bso.ordered} {order.bso.ordered === 1 ? 'pallet' : 'pallets'} ordered
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-stone-400">Done</span>
-              <Stepper
-                value={order.bso.done}
-                max={order.bso.ordered}
-                onChange={(value) => {
-                void setBsoDone(value)
-              }}
-              />
-            </div>
-          </div>
+<div
+  className="divide-y"
+  style={{ borderColor: '#F0EDE8' }}
+>
+  {order.bso.ordered > 0 && (
+    <div className="px-4 py-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span
+            className="w-8 text-xs font-medium uppercase tracking-widest text-stone-500"
+            style={{ fontFamily: 'DM Mono, monospace' }}
+          >
+            BSO
+          </span>
+
+          <span className="text-xs text-stone-400">
+            {order.bso.ordered}{' '}
+            {order.bso.ordered === 1 ? 'pallet' : 'pallets'} ordered
+          </span>
         </div>
 
-        {/* MP */}
-        <div className="px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span
-                className="text-xs font-medium tracking-widest text-stone-500 uppercase w-8"
-                style={{ fontFamily: 'DM Mono, monospace' }}
-              >
-                MP
-              </span>
-              <span className="text-xs text-stone-400">
-                {order.mp.ordered} {order.mp.ordered === 1 ? 'pallet' : 'pallets'} ordered
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-stone-400">Done</span>
-              <Stepper
-                value={order.mp.done}
-                max={order.mp.ordered}
-                onChange={(value) => {
-                void setMpDone(value)
-              }}
-              />
-            </div>
-          </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-stone-400">
+            Done
+          </span>
+
+          <Stepper
+            value={order.bso.done}
+            max={order.bso.ordered}
+            onChange={(value) => {
+              void setBsoDone(value)
+            }}
+          />
         </div>
       </div>
+    </div>
+  )}
+
+  {order.fourPack.ordered > 0 && (
+    <div className="px-4 py-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span
+            className="w-12 text-xs font-medium uppercase tracking-widest text-stone-500"
+            style={{ fontFamily: 'DM Mono, monospace' }}
+          >
+            4PAK
+          </span>
+
+          <span className="text-xs text-stone-400">
+            {order.fourPack.ordered}{' '}
+            {order.fourPack.ordered === 1 ? 'pallet' : 'pallets'} ordered
+          </span>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-stone-400">
+            Done
+          </span>
+
+          <Stepper
+            value={order.fourPack.done}
+            max={order.fourPack.ordered}
+            onChange={(value) => {
+              void setFourPackDone(value)
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  )}
+</div>
 
       {/* Status toggles */}
       <div
@@ -339,36 +472,69 @@ function DayCell({
   orders,
   selected,
   today,
+  analyticsSku,
+  outsideMonth,
   onClick,
 }: {
-  date: Date | null
+  date: Date
   orders: StoreOrder[]
   selected: boolean
   today: boolean
+  analyticsSku: 'BSO' | '4PAK'
+  outsideMonth: boolean
   onClick: () => void
 }) {
-  if (!date) {
-    return (
-      <div
-        className="border-r border-b"
-        style={{ borderColor: '#E0DDD8', backgroundColor: '#F4F2EE', minHeight: 120 }}
-      />
-    )
-  }
+if (!date) {
+  return (
+    <div
+      className="border-r border-b"
+      style={{
+        borderColor: '#E0DDD8',
+        backgroundColor: '#F4F2EE',
+        minHeight: 120,
+      }}
+    />
+  )
+}
+  const visibleOrders = orders.filter((order) =>
+  analyticsSku === 'BSO'
+    ? order.bso.ordered > 0
+    : order.fourPack.ordered > 0,
+)
+function getSelectedQuantity(order: StoreOrder) {
+  return analyticsSku === 'BSO'
+    ? order.bso
+    : order.fourPack
+}
+const totalPallets = visibleOrders.reduce(
+  (sum, order) =>
+    sum + getSelectedQuantity(order).ordered,
+  0,
+)
 
-  const totalPallets = orders.reduce((s, o) => s + o.bso.ordered + o.mp.ordered, 0)
-  const allFinished = orders.length > 0 && orders.every((o) => !!o.finishedAt)
-  const allShipped = orders.length > 0 && orders.every((o) => !!o.shippedAt)
+const allFinished =
+  visibleOrders.length > 0 &&
+  visibleOrders.every((order) => !!order.finishedAt)
+
+const allShipped =
+  visibleOrders.length > 0 &&
+  visibleOrders.every((order) => !!order.shippedAt)
 
   return (
     <button
       onClick={onClick}
-      className={`border-r border-b text-left p-2.5 w-full transition-colors ${
-        selected
-          ? 'bg-stone-900 text-white'
-          : 'bg-white hover:bg-stone-50 text-stone-900'
-      }`}
-      style={{ borderColor: '#E0DDD8', minHeight: 120, display: 'block' }}
+      className={`h-full w-full border-r border-b p-2.5 text-left transition-colors ${
+      selected
+        ? 'bg-stone-900 text-white'
+        : outsideMonth
+          ? 'bg-stone-100 text-stone-400 hover:bg-stone-200'
+          : 'bg-white text-stone-900 hover:bg-stone-50'
+        }`}
+      style={{
+        borderColor: '#E0DDD8',
+        minHeight: 160,
+        display: 'block',
+    }}
     >
       {/* Date number */}
       <div className="flex items-start justify-between mb-2">
@@ -394,45 +560,43 @@ function DayCell({
 
       {/* Order lines */}
       <div className="space-y-1">
-        {orders.map((ord) => (
-          <div key={ord.id} className="flex items-baseline gap-0" style={{ lineHeight: '1.3' }}>
-<span
-  className={`text-[10px] font-medium truncate flex-1 ${
-    selected ? 'text-stone-300' : 'text-stone-600'
-  } ${ord.shippedAt ? 'line-through opacity-50' : ''}`}
-  style={{
-    fontFamily: 'Barlow Condensed, sans-serif',
-    maxWidth: 90,
-  }}
->
-  {ord.finishedAt && !ord.shippedAt && (
-    <span
-      className={`mr-1 ${
-        selected ? 'text-green-300' : 'text-green-700'
-      }`}
-      aria-label="Order finished"
-    >
-      ✓
-    </span>
-  )}
+        {visibleOrders.map((ord) => {
+  const quantity = getSelectedQuantity(ord)
 
-  {ord.store}
-</span>
-            <span
-              className={`text-[9px] tabular-nums flex-shrink-0 ml-1 ${
-                selected ? 'text-stone-500' : 'text-stone-400'
-              }`}
-              style={{ fontFamily: 'DM Mono, monospace' }}
-            >
-              {[
-                ord.bso.ordered > 0 ? `B${ord.bso.ordered}` : null,
-                ord.mp.ordered > 0 ? `M${ord.mp.ordered}` : null,
-            ]
-                .filter(Boolean)
-                .join(' ')}
-            </span>
-          </div>
-        ))}
+  return (
+    <div
+      key={ord.id}
+      className="flex items-baseline gap-2"
+    >
+      <span
+        className={`flex-1 truncate text-[20px] font-medium ${
+          selected
+            ? 'text-stone-300'
+            : 'text-stone-600'
+        }`}
+        style={{
+          fontFamily:
+            'Barlow Condensed, sans-serif',
+        }}
+      >
+        {ord.store}
+      </span>
+
+      <span
+        className={`flex-shrink-0 text-[20px] font-bold tabular-nums ${
+          selected
+            ? 'text-white'
+            : 'text-stone-700'
+        }`}
+        style={{
+          fontFamily: 'DM Mono, monospace',
+        }}
+      >
+        {quantity.done}/{quantity.ordered}
+      </span>
+    </div>
+  )
+})}
       </div>
     </button>
   )
@@ -485,8 +649,8 @@ function DetailPanel({
   const date = new Date(yr, mo - 1, dy)
   const dayOrders = orders[selectedKey] ?? []
 
-  const totalPallets = dayOrders.reduce((s, o) => s + o.bso.ordered + o.mp.ordered, 0)
-  const donePallets = dayOrders.reduce((s, o) => s + o.bso.done + o.mp.done, 0)
+  const totalPallets = dayOrders.reduce((s, o) => s + o.bso.ordered + o.fourPack.ordered, 0)
+  const donePallets = dayOrders.reduce((s, o) => s + o.bso.done + o.fourPack.done, 0)
   const finishedCount = dayOrders.filter((o) => !!o.finishedAt).length
   const shippedCount = dayOrders.filter((o) => !!o.shippedAt).length
 
@@ -588,13 +752,119 @@ function DetailPanel({
     </div>
   )
 }
+// ─── Weekly Totals Column ──────────────────────────────────────────────────────────────────────
 
+interface WeeklyTotalsColumnProps {
+  totals: WeeklyTotals
+  sku: 'BSO' | '4PAK'
+}
+
+function WeeklyTotalsColumn({
+  totals,
+  sku,
+}: WeeklyTotalsColumnProps) {
+  const selectedTotals =
+    sku === 'BSO'
+      ? totals.bso
+      : totals.fourPack
+
+  return (
+    <div className="h-full border-l-2 border-stone-300 bg-stone-100 p-4">
+      <p className="text-sm font-bold uppercase tracking-wider text-stone-500">
+        {sku} Week
+      </p>
+
+      <div className="mt-4 space-y-4">
+        <div>
+          <p className="text-sm text-stone-500">
+            Ordered
+          </p>
+
+          <p className="text-3xl font-black tabular-nums text-stone-900">
+            {selectedTotals.ordered}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-sm text-stone-500">
+            Finished
+          </p>
+
+          <p className="text-3xl font-black tabular-nums text-stone-900">
+            {selectedTotals.finished}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-sm text-stone-500">
+            Remaining
+          </p>
+
+          <p className="text-3xl font-black tabular-nums text-stone-900">
+            {selectedTotals.remaining}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AnalyticsTotalsBar({
+  sku,
+  totals,
+}: {
+  sku: 'BSO' | '4PAK'
+  totals: ProductTotals
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-4 border-b border-stone-300 bg-white px-6 py-4">
+      <div className="border-l-4 border-stone-800 bg-stone-100 px-5 py-3">
+        <p className="text-sm font-bold uppercase tracking-wider text-stone-500">
+          {sku} Ordered
+        </p>
+
+        <p className="mt-1 text-4xl font-black tabular-nums text-stone-900">
+          {totals.ordered}
+        </p>
+      </div>
+
+      <div className="border-l-4 border-stone-800 bg-stone-100 px-5 py-3">
+        <p className="text-sm font-bold uppercase tracking-wider text-stone-500">
+          {sku} Finished
+        </p>
+
+        <p className="mt-1 text-4xl font-black tabular-nums text-stone-900">
+          {totals.finished}
+        </p>
+      </div>
+
+      <div className="border-l-4 border-stone-800 bg-stone-100 px-5 py-3">
+        <p className="text-sm font-bold uppercase tracking-wider text-stone-500">
+          {sku} Remaining
+        </p>
+
+        <p className="mt-1 text-4xl font-black tabular-nums text-stone-900">
+          {totals.remaining}
+        </p>
+      </div>
+    </div>
+  )
+}
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [orders, setOrders] = useState<CalendarData>({})
-  const [selectedKey, setSelectedKey] = useState<string | null>(null)
-  const [month, setMonth] = useState({ year: 2026, month: 6 })
+
+  const [selectedKey, setSelectedKey] =
+    useState<string | null>(null)
+
+  const [month, setMonth] = useState({
+    year: 2026,
+    month: 6,
+  })
+
+  const [analyticsSku, setAnalyticsSku] =
+    useState<'BSO' | '4PAK'>('BSO')
 
   async function reloadOrders() {
     try {
@@ -603,7 +873,8 @@ export default function App() {
 
       setOrders(calendarData)
 
-      const firstDateKey = Object.keys(calendarData).sort()[0]
+      const firstDateKey =
+        Object.keys(calendarData).sort()[0]
 
       if (firstDateKey && !selectedKey) {
         setSelectedKey(firstDateKey)
@@ -618,7 +889,10 @@ export default function App() {
         })
       }
     } catch (error) {
-      console.error('Failed to load orders:', error)
+      console.error(
+        'Failed to load orders:',
+        error,
+      )
     }
   }
 
@@ -632,7 +906,7 @@ export default function App() {
   ) {
     const orderIds = [
       order.bso.orderId,
-      order.mp.orderId,
+      order.fourPack.orderId,
     ].filter(
       (id): id is number => id !== null,
     )
@@ -654,21 +928,21 @@ export default function App() {
       )
     }
   }
+
   async function setFinishedQuantity(
     orderId: number,
     quantity: number,
   ) {
-
     try {
       await updateSalesOrder(orderId, {
         qty_finished: quantity,
-    })
+      })
 
-    await reloadOrders()
-  } catch (error) {
-    console.error(
-      'Failed to update finished quantity:',
-      error,
+      await reloadOrders()
+    } catch (error) {
+      console.error(
+        'Failed to update finished quantity:',
+        error,
       )
     }
   }
@@ -679,7 +953,7 @@ export default function App() {
   ) {
     const orderIds = [
       order.bso.orderId,
-      order.mp.orderId,
+      order.fourPack.orderId,
     ].filter(
       (id): id is number => id !== null,
     )
@@ -700,21 +974,6 @@ export default function App() {
         error,
       )
     }
-  }
-
-  const today = toKey(new Date())
-  const weeks = getWeeks(month.year, month.month)
-
-  function updateOrder(
-    dateKey: string,
-    updated: StoreOrder,
-  ) {
-    setOrders((previous) => ({
-      ...previous,
-      [dateKey]: previous[dateKey].map((order) =>
-        order.id === updated.id ? updated : order,
-      ),
-    }))
   }
 
   function prevMonth() {
@@ -747,11 +1006,42 @@ export default function App() {
     })
   }
 
+  const today = toKey(new Date())
+
+  const weeks = getWeeks(
+    month.year,
+    month.month,
+  )
+const visibleMonthOrders = weeks.flatMap((week) =>
+  week.flatMap((date) => {
+    if (!date) {
+      return []
+    }
+
+    const dateKey = toKey(date)
+
+    return orders[dateKey] ?? []
+  }),
+)
+
+const visibleMonthTotals =
+  calculateWeeklyTotals(visibleMonthOrders)
+
+const selectedMonthTotals =
+  analyticsSku === 'BSO'
+    ? visibleMonthTotals.bso
+    : visibleMonthTotals.fourPack
+
   return (
-    <div className="flex flex-col h-full" style={{ backgroundColor: '#F4F2EE' }}>
-      {/* App Header */}
+    <div
+      className="flex h-full flex-col"
+      style={{
+        backgroundColor: '#F4F2EE',
+      }}
+    >
+      {/* App header */}
       <header
-        className="flex items-center justify-between px-6 border-b flex-shrink-0"
+        className="flex flex-shrink-0 items-center justify-between border-b px-6"
         style={{
           borderColor: '#E0DDD8',
           backgroundColor: '#FFFFFF',
@@ -760,109 +1050,212 @@ export default function App() {
       >
         <div className="flex items-baseline gap-3">
           <h1
-            className="text-xl font-semibold tracking-wide text-stone-900 uppercase"
-            style={{ fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.1em' }}
+            className="text-xl font-semibold uppercase tracking-wide text-stone-900"
+            style={{
+              fontFamily:
+                'Barlow Condensed, sans-serif',
+              letterSpacing: '0.1em',
+            }}
           >
             Production Orders
           </h1>
-          <span className="text-stone-300 text-sm">·</span>
+
+          <span className="text-sm text-stone-300">
+            ·
+          </span>
+
           <span
             className="text-sm text-stone-500"
-            style={{ fontFamily: 'DM Mono, monospace' }}
+            style={{
+              fontFamily: 'DM Mono, monospace',
+            }}
           >
-            {MONTH_NAMES[month.month]} {month.year}
+            {MONTH_NAMES[month.month]}{' '}
+            {month.year}
           </span>
         </div>
 
-        {/* Month nav */}
+        {/* Month navigation */}
         <div className="flex items-center gap-1">
           <button
+            type="button"
             onClick={prevMonth}
-            className="w-8 h-8 flex items-center justify-center border border-stone-200 text-stone-500 hover:bg-stone-50 transition-colors text-sm"
+            className="flex h-8 w-8 items-center justify-center border border-stone-200 text-sm text-stone-500 transition-colors hover:bg-stone-50"
           >
             ‹
           </button>
+
           <button
-            onClick={() => setMonth({ year: 2026, month: 6 })}
-            className="px-3 h-8 border border-stone-200 text-xs text-stone-500 hover:bg-stone-50 transition-colors"
-            style={{ fontFamily: 'DM Mono, monospace' }}
+            type="button"
+            onClick={() => {
+              const now = new Date()
+
+              setMonth({
+                year: now.getFullYear(),
+                month: now.getMonth(),
+              })
+            }}
+            className="h-8 border border-stone-200 px-3 text-xs text-stone-500 transition-colors hover:bg-stone-50"
+            style={{
+              fontFamily: 'DM Mono, monospace',
+            }}
           >
             today
           </button>
+
           <button
+            type="button"
             onClick={nextMonth}
-            className="w-8 h-8 flex items-center justify-center border border-stone-200 text-stone-500 hover:bg-stone-50 transition-colors text-sm"
+            className="flex h-8 w-8 items-center justify-center border border-stone-200 text-sm text-stone-500 transition-colors hover:bg-stone-50"
           >
             ›
           </button>
         </div>
       </header>
 
-      {/* Body */}
+      {/* Analytics SKU toggle */}
+      <div className="flex items-center gap-2 border-b border-stone-300 bg-white px-6 py-3">
+        <span className="mr-2 text-sm font-bold uppercase tracking-wide text-stone-500">
+          Products
+        </span>
+
+        <button
+          type="button"
+          onClick={() =>
+            setAnalyticsSku('BSO')
+          }
+          className={`border px-4 py-2 text-sm font-bold transition-colors ${
+            analyticsSku === 'BSO'
+              ? 'border-stone-900 bg-stone-900 text-white'
+              : 'border-stone-300 bg-white text-stone-600 hover:bg-stone-50'
+          }`}
+        >
+          BSO
+        </button>
+
+        <button
+          type="button"
+          onClick={() =>
+            setAnalyticsSku('4PAK')
+          }
+          className={`border px-4 py-2 text-sm font-bold transition-colors ${
+            analyticsSku === '4PAK'
+              ? 'border-stone-900 bg-stone-900 text-white'
+              : 'border-stone-300 bg-white text-stone-600 hover:bg-stone-50'
+          }`}
+        >
+          4PAK
+        </button>
+      </div>
+      <AnalyticsTotalsBar
+        sku={analyticsSku}
+        totals={selectedMonthTotals}
+      />
+      {/* Dashboard body */}
       <div className="flex flex-1 overflow-hidden">
         {/* Calendar */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Day header row */}
-          <div
-            className="grid flex-shrink-0 border-b"
-            style={{ gridTemplateColumns: 'repeat(5, 1fr)', borderColor: '#E0DDD8' }}
-          >
-            {DAY_LABELS.map((label) => (
-              <div
-                key={label}
-                className="py-2 text-center border-r"
-                style={{ borderColor: '#E0DDD8' }}
-              >
-                <span
-                  className="text-xs font-medium text-stone-400 uppercase tracking-widest"
-                  style={{ fontFamily: 'DM Mono, monospace' }}
-                >
-                  {label}
-                </span>
-              </div>
-            ))}
-          </div>
+        <div className="flex flex-1 flex-col overflow-hidden">
+          {/* Day headers */}
+<div
+  className="grid flex-shrink-0 border-b"
+  style={{
+    gridTemplateColumns:
+      'repeat(5, minmax(0, 1fr)) 180px',
+    borderColor: '#E0DDD8',
+  }}
+>
+  {DAY_LABELS.map((label) => (
+    <div
+      key={label}
+      className="border-r py-2 text-center"
+      style={{
+        borderColor: '#E0DDD8',
+      }}
+    >
+      <span
+        className="text-xs font-medium uppercase tracking-widest text-stone-400"
+        style={{
+          fontFamily: 'DM Mono, monospace',
+        }}
+      >
+        {label}
+      </span>
+    </div>
+  ))}
+</div>
 
-          {/* Week rows */}
-          <div className="flex-1 overflow-y-auto scrollbar-thin">
-            {weeks.map((week, wi) => (
-              <div
-                key={wi}
-                className="grid border-b"
-                style={{
-                  gridTemplateColumns: 'repeat(5, 1fr)',
-                  borderColor: '#E0DDD8',
-                }}
-              >
-                {week.map((date, di) => {
-                  const key = date ? toKey(date) : null
+          {/* Calendar weeks */}
+          <div className="scrollbar-thin flex-1 overflow-y-auto">
+            {weeks.map((week, weekIndex) => {
+              const weeklyOrders = week.flatMap((date) => {
+                if (!date) {
+                  return []
+                }
+
+                return orders[toKey(date)] ?? []
+              })
+
+              const weeklyTotals =
+                calculateWeeklyTotals(weeklyOrders)
+
+              return (
+                <div
+                  key={weekIndex}
+                  className="grid items-stretch border-b"
+                  style={{
+                    gridTemplateColumns:
+                      'repeat(5, minmax(0, 1fr)) 180px',
+                    borderColor: '#E0DDD8',
+                  }}
+                >
+                  {week.map((date, dayIndex) => {
+                  const dateKey = toKey(date)
+
+                  const outsideMonth =
+                    date.getMonth() !== month.month ||
+                    date.getFullYear() !== month.year
+
                   return (
                     <DayCell
-                      key={di}
+                      key={dayIndex}
                       date={date}
-                      orders={key ? (orders[key] ?? []) : []}
-                      selected={!!key && key === selectedKey}
-                      today={key === today}
-                      onClick={() => key && setSelectedKey(key)}
-                    />
-                  )
-                })}
-              </div>
-            ))}
+                      orders={orders[dateKey] ?? []}
+                      selected={dateKey === selectedKey}
+                      today={dateKey === today}
+                      analyticsSku={analyticsSku}
+                      outsideMonth={outsideMonth}
+                      onClick={() => {
+                  setSelectedKey(dateKey)
+                  }}
+                />
+              )
+        })}
+
+                  <WeeklyTotalsColumn
+                    totals={weeklyTotals}
+                    sku={analyticsSku}
+                  />
+                </div>
+              )
+            })}
           </div>
         </div>
 
-        {/* Detail Panel */}
-        <div className="w-96 flex-shrink-0 overflow-hidden flex flex-col">
-        <DetailPanel
-          selectedKey={selectedKey}
-          orders={orders}
-          onFinishedQuantityChange={
-            setFinishedQuantity
-          }
-          onFinishedChange={setStoreFinished}
-          onShippedChange={setStoreShipped}
-        />
+        {/* Detail panel */}
+        <div className="flex w-96 flex-shrink-0 flex-col overflow-hidden">
+          <DetailPanel
+            selectedKey={selectedKey}
+            orders={orders}
+            onFinishedQuantityChange={
+              setFinishedQuantity
+            }
+            onFinishedChange={
+              setStoreFinished
+            }
+            onShippedChange={
+              setStoreShipped
+            }
+          />
         </div>
       </div>
     </div>
