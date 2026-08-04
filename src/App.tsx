@@ -18,9 +18,13 @@ export default function App() {
   const [selectedKey, setSelectedKey] =
     useState<string | null>(null)
 
-  const [month, setMonth] = useState({
-    year: 2026,
-    month: 6,
+  const [month, setMonth] = useState(() => {
+    const today = new Date()
+
+  return {
+      year: today.getFullYear(),
+      month: today.getMonth(),
+    }
   })
 
   const [analyticsSku, setAnalyticsSku] =
@@ -33,20 +37,27 @@ export default function App() {
 
       setOrders(calendarData)
 
-      const firstDateKey =
-        Object.keys(calendarData).sort()[0]
+    if (!selectedKey) {
+      const today = new Date()
+      const todayKey = toKey(today)
 
-      if (firstDateKey && !selectedKey) {
-        setSelectedKey(firstDateKey)
+      const currentYear = today.getFullYear()
+      const currentMonth = today.getMonth()
 
-        const [year, monthNumber] = firstDateKey
-          .split('-')
-          .map(Number)
+      const currentMonthPrefix =
+        `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`
 
-        setMonth({
-          year,
-          month: monthNumber - 1,
-        })
+      const currentMonthOrderKeys = Object.keys(calendarData)
+      .filter((dateKey) =>
+        dateKey.startsWith(currentMonthPrefix),
+      )
+      .sort()
+
+    if (calendarData[todayKey]) {
+      setSelectedKey(todayKey)
+      } else if (currentMonthOrderKeys.length > 0) {
+        setSelectedKey(currentMonthOrderKeys[0])
+  }
       }
     } catch (error) {
       console.error(
