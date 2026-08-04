@@ -24,7 +24,7 @@ export interface ApiSalesOrder {
   shipped_time_stamp: string | null
 }
 
-// defines the input for updating a sales order, which can include finished, shipped, qty_finished, and qty_shipped fields
+// defines the UI input for updating a sales order, which can include finished, shipped, qty_finished, and qty_shipped fields
 // these are the fields that can be updated by the frontend, and the backend will handle updating the corresponding timestamps based on these fields
 export interface UpdateSalesOrderInput {
   finished?: boolean
@@ -67,7 +67,7 @@ export async function getSalesOrders(): Promise<ApiSalesOrder[]> {
   const data: unknown = await response.json()
   
   if (!Array.isArray(data)) {
-    throw new Error('Failed to load sales orders: `${await getErrorMessage(response)}`')
+    throw new Error(`Failed to load sales orders: ${await getErrorMessage(response)}`)
   }
 
   return data as ApiSalesOrder[]
