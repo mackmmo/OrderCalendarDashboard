@@ -9,10 +9,17 @@ import {WeeklyTotalsColumn } from './components/WeeklyTotalsColumn.tsx'
 import { DetailPanel } from './components/DetailPanel.tsx'
 import AnalyticsTotalsBar from './components/WeeklyTotalsColumn.tsx'
 import { MONTH_NAMES, DAY_LABELS } from './components/CalendarHelper.ts'
+import Login from './pages/Login.tsx'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
+  
+  // Check if access token is present in local storage. If not, render the Login component.
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(
+    () => !!localStorage.getItem('accessToken')
+  )
+
   const [orders, setOrders] = useState<CalendarData>({})
 
   const [selectedKey, setSelectedKey] =
@@ -68,8 +75,30 @@ export default function App() {
   }
 
   useEffect(() => {
+    if (isLoggedIn) {
     void reloadOrders()
-  }, [])
+    }
+  }, [isLoggedIn])
+
+  useEffect(() => {
+  function handleAuthExpired() {
+    setIsLoggedIn(false)
+    setOrders({})
+    setSelectedKey(null)
+  }
+
+  window.addEventListener(
+    'auth-expired',
+    handleAuthExpired,
+  )
+
+  return () => {
+    window.removeEventListener(
+      'auth-expired',
+      handleAuthExpired,
+    )
+  }
+}, [])
 
   async function setStoreFinished(
     order: StoreOrder,
@@ -202,6 +231,12 @@ const selectedMonthTotals =
   analyticsSku === 'BSO'
     ? visibleMonthTotals.bso
     : visibleMonthTotals.fourPack
+
+  if (!isLoggedIn) {
+  return (
+    <Login onLogin={() => setIsLoggedIn(true)} />
+  )
+}
 
   return (
     <div

@@ -1,5 +1,8 @@
 // src/api/orders.ts
 // assign API_URL from environment variable
+
+import { refreshAccessToken } from './auth'
+
 const API_URL = import.meta.env.VITE_API_URL 
 
 // throw an error if API_URL is not set
@@ -52,22 +55,72 @@ async function getErrorMessage(response: Response): Promise<string> {
   }
 }
 
+function getAccessToken(): string {
+  const accessToken = localStorage.getItem('accessToken')
+
+  if (!accessToken) {
+    throw new Error('User is not logged in')
+  }
+
+  return accessToken
+}
+
+async function authenticatedFetch(
+  url: string,
+  options: RequestInit = {},
+): Promise<Response> {
+  let accessToken = getAccessToken()
+
+  let response = await fetch(url, {
+    ...options,
+    headers: {
+      ...options.headers,
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+
+  if (response.status !== 401) {
+    return response
+  }
+
+  accessToken = await refreshAccessToken()
+
+  response = await fetch(url, {
+    ...options,
+    headers: {
+      ...options.headers,
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+
+  return response
+}
+
 // Gather sales orders from the API and return them as an array of ApiSalesOrder objects. 
 // If the response is not ok, throw an error with the error message from the response. 
 // If the response body is not an array, throw an error with a message indicating that the response body is not an array.
-export async function getSalesOrders(): Promise<ApiSalesOrder[]> {
-  const response = await fetch(`${API_URL}/sales-orders/`)
+export async function getSalesOrders():
+  Promise<ApiSalesOrder[]> {
+
+  const response = await authenticatedFetch(
+    `${API_URL}/sales-orders/`,
+  )
 
   if (!response.ok) {
     throw new Error(
-      `Failed to load sales orders: ${await getErrorMessage(response)}`,
+      `Failed to load sales orders: ${
+        await getErrorMessage(response)
+      }`,
     )
   }
 
-  const data: unknown = await response.json()
-  
+  const data: unknown =
+    await response.json()
+
   if (!Array.isArray(data)) {
-    throw new Error(`Failed to load sales orders: ${await getErrorMessage(response)}`)
+    throw new Error(
+      'Failed to load sales orders: response body is not an array',
+    )
   }
 
   return data as ApiSalesOrder[]
@@ -79,7 +132,8 @@ export async function updateSalesOrder(
   orderId: number,
   changes: UpdateSalesOrderInput,
 ): Promise<ApiSalesOrder> {
-  const response = await fetch(
+
+  const response = await authenticatedFetch(
     `${API_URL}/sales-orders/${orderId}/`,
     {
       method: 'PATCH',
@@ -92,7 +146,9 @@ export async function updateSalesOrder(
 
   if (!response.ok) {
     throw new Error(
-      `Failed to update sales order: ${await getErrorMessage(response)}`,
+      `Failed to update sales order: ${
+        await getErrorMessage(response)
+      }`,
     )
   }
 
@@ -104,7 +160,8 @@ export async function updateSalesOrder(
 export async function deleteSalesOrder(
   orderId: number,
 ): Promise<void> {
-  const response = await fetch(
+
+  const response = await authenticatedFetch(
     `${API_URL}/sales-orders/${orderId}/`,
     {
       method: 'DELETE',
@@ -113,7 +170,9 @@ export async function deleteSalesOrder(
 
   if (!response.ok) {
     throw new Error(
-      `Failed to delete sales order: ${await getErrorMessage(response)}`,
+      `Failed to delete sales order: ${
+        await getErrorMessage(response)
+      }`,
     )
   }
 }
@@ -134,6 +193,7 @@ export async function deleteSalesOrder(
 export function markOrderFinished(
   orderId: number,
 ): Promise<ApiSalesOrder> {
+  
   return updateSalesOrder(orderId, {
     finished: true,
   })

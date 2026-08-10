@@ -1,5 +1,7 @@
 // Authorization API functions for the Order Calendar Dashboard application
 
+// First Response _________________________________________________________________________________
+
 // API URL is retrieved from environment variables. Ensure that VITE_API_URL is defined in your .env file.
 const API_URL = import.meta.env.VITE_API_URL
 if (!API_URL) {
@@ -10,13 +12,15 @@ export interface LoginResponse {
   response: string
   refresh: string
 }
+
 // Function to perform login by sending a POST request to the API with the provided username and password
 export async function login(
     username: string,
     password: string,
 ): Promise<LoginResponse> { // Ensure that the API URL is defined before making the request
+    console.log('Sending login request to:', `${API_URL}/api/token/`)
     const response = await fetch( // Define the API endpoint for login using the base API URL and the login path
-        `${API_URL}/login`, 
+        `${API_URL}/api/token/`, 
         {
             method: 'POST', // Specify the HTTP method as POST for sending data to the server
             headers: {
@@ -27,8 +31,64 @@ export async function login(
     )
 
     if (!response.ok) {
-        throw new Error('Failed to login')
+        const errorText = await response.text() // Read the response text for debugging purposes
+        
+        console.error(
+            'Login Failed:',
+            response.status,
+            response.statusText,
+            errorText
+        )
     }
 
     return response.json() as Promise<LoginResponse> // Parse the JSON response from the server and return it as a Promise of type LoginResponse
+}
+
+// Refresh Response _________________________________________________________________________________
+
+export interface RefreshResponse {
+  access: string
+}
+
+export async function refreshAccessToken(): Promise<string> {
+  const refreshToken =
+    localStorage.getItem('refreshToken')
+
+  if (!refreshToken) {
+    throw new Error('No refresh token available')
+  }
+
+  const response = await fetch(
+    `${API_URL}/api/token/refresh/`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        refresh: refreshToken,
+      }),
+    },
+  )
+
+  if (!response.ok) {
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('refreshToken')
+
+    window.dispatchEvent(
+        new Event('auth-expired')
+    )
+    
+    throw new Error('Refresh token is invalid or expired')
+  }
+
+  const data: RefreshResponse =
+    await response.json()
+
+  localStorage.setItem(
+    'accessToken',
+    data.access,
+  )
+
+  return data.access
 }
