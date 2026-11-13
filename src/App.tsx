@@ -89,12 +89,23 @@ export default function App() {
     return () => window.clearInterval(timer)
   }, [isLoggedIn])
 
+  function resetSession() {
+    setIsLoggedIn(false)
+    setOrders({})
+    setSelectedKey(null)
+    setDetailOpen(false)
+    setActionError(null)
+  }
+
+  function logOut() {
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('refreshToken')
+    resetSession()
+  }
+
   useEffect(() => {
     function handleAuthExpired() {
-      setIsLoggedIn(false)
-      setOrders({})
-      setSelectedKey(null)
-      setDetailOpen(false)
+      resetSession()
     }
 
     window.addEventListener('auth-expired', handleAuthExpired)
@@ -199,7 +210,7 @@ export default function App() {
       >
         <div className="flex min-w-0 items-baseline gap-2 md:gap-3">
           <h1
-            className="truncate text-lg font-semibold uppercase tracking-wide text-stone-900 md:text-xl"
+            className="hidden truncate text-lg font-semibold uppercase tracking-wide text-stone-900 sm:block md:text-xl"
             style={{
               fontFamily: 'Barlow Condensed, sans-serif',
               letterSpacing: '0.1em',
@@ -208,7 +219,7 @@ export default function App() {
             <span className="hidden sm:inline">Production </span>Orders
           </h1>
 
-          <span className="text-sm text-stone-300">·</span>
+          <span className="hidden text-sm text-stone-300 sm:inline">·</span>
 
           <span
             className="whitespace-nowrap text-sm text-stone-500"
@@ -251,6 +262,15 @@ export default function App() {
             className="flex h-10 w-10 items-center justify-center border border-stone-200 text-sm text-stone-500 transition-colors hover:bg-stone-50 md:h-8 md:w-8"
           >
             ›
+          </button>
+
+          <button
+            type="button"
+            onClick={logOut}
+            className="ml-1 h-10 whitespace-nowrap border border-stone-200 px-2 text-xs text-stone-500 transition-colors hover:bg-stone-50 md:ml-3 md:h-8 md:px-3"
+            style={{ fontFamily: 'DM Mono, monospace' }}
+          >
+            log out
           </button>
         </div>
       </header>
