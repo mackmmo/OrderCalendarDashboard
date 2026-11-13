@@ -11,25 +11,37 @@ if (!API_URL) {
 }
 // every sales order has the following fields, which are returned by the API
 // defines the naming convention for the API response and data types used in the frontend
-export interface ApiSalesOrder { 
-  sales_order_id: number
-  sales_order_number: number
+// One row per QuickBooks sales-order line (a pallet product for a store).
+export interface ApiSalesOrder {
+  sales_order_id: string
+  sales_order_number: string
   store_name: string
   item: string
   qty_ordered: number
   qty_finished: number
   qty_shipped: number
+  in_progress: boolean
   finished: boolean
   shipped: boolean
-  sales_order_date: string
-  ship_date: string
+  status: 'queue' | 'in_progress' | 'finished' | 'done'
+  sales_order_date: string | null
+  production_date: string | null
+  started_time_stamp: string | null
   finished_time_stamp: string | null
   shipped_time_stamp: string | null
+  started_by_username: string | null
+  finished_by_username: string | null
+  shipped_by_username: string | null
+  po_number: string
+  tracking_number: string
+  qb_is_fully_invoiced: boolean
+  qb_is_manually_closed: boolean
 }
 
 // defines the UI input for updating a sales order, which can include finished, shipped, qty_finished, and qty_shipped fields
 // these are the fields that can be updated by the frontend, and the backend will handle updating the corresponding timestamps based on these fields
 export interface UpdateSalesOrderInput {
+  in_progress?: boolean
   finished?: boolean
   shipped?: boolean
   qty_finished?: number
@@ -129,12 +141,12 @@ export async function getSalesOrders():
 // Update a sales order with the given changes and return the updated ApiSalesOrder object.
 // If the response is not ok, throw an error with the error message from the response.
 export async function updateSalesOrder(
-  orderId: number,
+  orderId: string,
   changes: UpdateSalesOrderInput,
 ): Promise<ApiSalesOrder> {
 
   const response = await authenticatedFetch(
-    `${API_URL}/sales-orders/${orderId}/`,
+    `${API_URL}/sales-orders/${encodeURIComponent(orderId)}/`,
     {
       method: 'PATCH',
       headers: {
@@ -158,11 +170,11 @@ export async function updateSalesOrder(
 // Delete a sales order with the given orderId. 
 // If the response is not ok, throw an error with the error message from the response.
 export async function deleteSalesOrder(
-  orderId: number,
+  orderId: string,
 ): Promise<void> {
 
   const response = await authenticatedFetch(
-    `${API_URL}/sales-orders/${orderId}/`,
+    `${API_URL}/sales-orders/${encodeURIComponent(orderId)}/`,
     {
       method: 'DELETE',
     },
@@ -191,7 +203,7 @@ export async function deleteSalesOrder(
 
 // Mark a sales order as finished by setting the finished field to true.
 export function markOrderFinished(
-  orderId: number,
+  orderId: string,
 ): Promise<ApiSalesOrder> {
   
   return updateSalesOrder(orderId, {
@@ -201,7 +213,7 @@ export function markOrderFinished(
 
 // Mark a sales order as not finished by setting the finished field to false.
 export function undoOrderFinished(
-  orderId: number,
+  orderId: string,
 ): Promise<ApiSalesOrder> {
   return updateSalesOrder(orderId, {
     finished: false,
@@ -210,7 +222,7 @@ export function undoOrderFinished(
 
 // Mark a sales order as shipped by setting the shipped field to true.
 export function markOrderShipped(
-  orderId: number,
+  orderId: string,
 ): Promise<ApiSalesOrder> {
   return updateSalesOrder(orderId, {
     shipped: true,
@@ -219,7 +231,7 @@ export function markOrderShipped(
 
 // Mark a sales order as not shipped by setting the shipped field to false.
 export function undoOrderShipped(
-  orderId: number,
+  orderId: string,
 ): Promise<ApiSalesOrder> {
   return updateSalesOrder(orderId, {
     shipped: false,
@@ -228,7 +240,7 @@ export function undoOrderShipped(
 
 // Update the finished quantity of a sales order by setting the qty_finished field to the given value.
 export function updateFinishedQuantity(
-  orderId: number,
+  orderId: string,
   qtyFinished: number,
 ): Promise<ApiSalesOrder> {
   return updateSalesOrder(orderId, {
@@ -238,7 +250,7 @@ export function updateFinishedQuantity(
 
 // Update the shipped quantity of a sales order by setting the qty_shipped field to the given value.
 export function updateShippedQuantity(
-  orderId: number,
+  orderId: string,
   qtyShipped: number,
 ): Promise<ApiSalesOrder> {
   return updateSalesOrder(orderId, {

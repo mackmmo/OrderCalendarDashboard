@@ -1,33 +1,10 @@
-export interface ApiSalesOrder {
-  sales_order_id: number
-  sales_order_number: number
-  store_name: string
-  item: string
-  qty_ordered: number
-  qty_finished: number
-  qty_shipped: number
-  finished: boolean
-  shipped: boolean
-  sales_order_date: string
-  ship_date: string
-  finished_time_stamp: string | null
-  shipped_time_stamp: string | null
-}
-
-export interface Qty {
-  ordered: number
-  done: number
-  orderId: number | null
-}
-
-export interface StoreOrder {
-  id: string
-  store: string
-  bso: Qty
-  fourPack: Qty
-  finishedAt: Date | null
-  shippedAt: Date | null
-}
+import type { ApiSalesOrder } from '../api/orders'
+import type {
+  OrderStatus,
+  Qty,
+  SignOff,
+  StoreOrder,
+} from '../components/Types.ts'
 
 export type CalendarData = Record<string, StoreOrder[]>
 
@@ -43,103 +20,159 @@ function parseTimestamp(value: string | null): Date | null {
     : parsedDate
 }
 
+function emptyQty(): Qty {
+  return { ordered: 0, done: 0, lines: [] }
+}
+
+/*
+ * A store card is signed off only when every line on it is.
+ * Show the latest sign-off (the one that completed the card).
+ */
+function combinedSignOff(
+  rows: ApiSalesOrder[],
+  timestampField:
+    | 'started_time_stamp'
+    | 'finished_time_stamp'
+    | 'shipped_time_stamp',
+  userField:
+    | 'started_by_username'
+    | 'finished_by_username'
+    | 'shipped_by_username',
+): SignOff | null {
+  let latest: SignOff | null = null
+
+  for (const row of rows) {
+    const at = parseTimestamp(row[timestampField])
+
+    if (!at) {
+      return null
+    }
+
+    if (!latest || at > latest.at) {
+      latest = { at, by: row[userField] }
+    }
+  }
+
+  return latest
+}
+
+function storeStatus(order: StoreOrder): OrderStatus {
+  if (order.qbDone) return 'done'
+  if (order.finished) return 'finished'
+  if (order.started) return 'in_progress'
+  return 'queue'
+}
+
 export function transformOrders(
   apiOrders: ApiSalesOrder[],
 ): CalendarData {
   const grouped: CalendarData = {}
+  const rowsByStore = new Map<string, ApiSalesOrder[]>()
+  const storeById = new Map<string, StoreOrder>()
 
   for (const apiOrder of apiOrders) {
-    const dateKey = apiOrder.ship_date
-    const storeKey = apiOrder.store_name.trim()
-    const item = apiOrder.item.trim().toUpperCase()
+    const dateKey = apiOrder.production_date
 
-    if (!grouped[dateKey]) {
-      grouped[dateKey] = []
+    if (!dateKey) {
+      continue
     }
 
-    let storeOrder = grouped[dateKey].find(
-      (order) => order.store === storeKey,
-    )
+    const store = apiOrder.store_name.trim()
+    const id = `${dateKey}-${store}`
+    let storeOrder = storeById.get(id)
 
     if (!storeOrder) {
       storeOrder = {
-        id: `${dateKey}-${storeKey}`,
-        store: storeKey,
-
-        bso: {
-          ordered: 0,
-          done: 0,
-          orderId: null,
-        },
-
-        fourPack: {
-          ordered: 0,
-          done: 0,
-          orderId: null,
-        },
-
-        finishedAt: null,
-        shippedAt: null,
+        id,
+        store,
+        salesOrderNumbers: [],
+        bso: emptyQty(),
+        fourPack: emptyQty(),
+        started: null,
+        finished: null,
+        shipped: null,
+        qbDone: false,
+        status: 'queue',
       }
 
-      grouped[dateKey].push(storeOrder)
+      storeById.set(id, storeOrder)
+      rowsByStore.set(id, [])
+      ;(grouped[dateKey] ??= []).push(storeOrder)
     }
 
-    if (item === 'BSO') {
-      storeOrder.bso = {
-        ordered: apiOrder.qty_ordered,
-        done: apiOrder.qty_finished,
-        orderId: apiOrder.sales_order_id,
-      }
-    } else if (item === 'MP') {
-      storeOrder.fourPack = {
-        ordered: apiOrder.qty_ordered,
-        done: apiOrder.qty_finished,
-        orderId: apiOrder.sales_order_id,
-      }
-    } else {
+    const item = apiOrder.item.trim().toUpperCase()
+    const qty =
+      item === 'BSO'
+        ? storeOrder.bso
+        : item === 'MP'
+          ? storeOrder.fourPack
+          : null
+
+    if (!qty) {
       console.warn(
-        `Unknown item type "${apiOrder.item}" for sales order ${apiOrder.sales_order_id}`,
+        `Unknown item type "${apiOrder.item}" for sales order ${apiOrder.sales_order_number}`,
       )
+      continue
     }
 
-    /*
-     * A store card can represent both a BSO row and an fourPack row.
-     * For display purposes, use whichever timestamp is present/latest.
-     */
-    const finishedAt = parseTimestamp(
-      apiOrder.finished_time_stamp,
-    )
+    qty.ordered += apiOrder.qty_ordered
+    qty.done += apiOrder.qty_finished
+    qty.lines.push({
+      id: apiOrder.sales_order_id,
+      ordered: apiOrder.qty_ordered,
+      done: apiOrder.qty_finished,
+    })
 
-    const shippedAt = parseTimestamp(
-      apiOrder.shipped_time_stamp,
-    )
-
-    if (
-      finishedAt &&
-      (!storeOrder.finishedAt ||
-        finishedAt > storeOrder.finishedAt)
-    ) {
-      storeOrder.finishedAt = finishedAt
+    if (!storeOrder.salesOrderNumbers.includes(apiOrder.sales_order_number)) {
+      storeOrder.salesOrderNumbers.push(apiOrder.sales_order_number)
     }
 
-    if (
-      shippedAt &&
-      (!storeOrder.shippedAt ||
-        shippedAt > storeOrder.shippedAt)
-    ) {
-      storeOrder.shippedAt = shippedAt
-    }
+    rowsByStore.get(id)!.push(apiOrder)
+  }
+
+  for (const [id, rows] of rowsByStore) {
+    const storeOrder = storeById.get(id)!
+
+    storeOrder.started = combinedSignOff(rows, 'started_time_stamp', 'started_by_username')
+    storeOrder.finished = combinedSignOff(rows, 'finished_time_stamp', 'finished_by_username')
+    storeOrder.shipped = combinedSignOff(rows, 'shipped_time_stamp', 'shipped_by_username')
+    storeOrder.qbDone =
+      rows.length > 0 &&
+      rows.every((row) => row.status === 'done')
+    storeOrder.status = storeStatus(storeOrder)
   }
 
   /*
    * Keep stores displayed consistently within each calendar day.
    */
   for (const dateKey of Object.keys(grouped)) {
-    grouped[dateKey].sort((a, b) =>
-      a.store.localeCompare(b.store),
-    )
+    grouped[dateKey] = grouped[dateKey]
+      .filter((order) => order.bso.lines.length + order.fourPack.lines.length > 0)
+      .sort((a, b) => a.store.localeCompare(b.store))
   }
 
   return grouped
+}
+
+/*
+ * Spread a new "done" total for one product across its QB lines,
+ * filling lines in order. Returns only the lines whose value changes.
+ */
+export function distributeDone(
+  qty: Qty,
+  total: number,
+): { id: string; done: number }[] {
+  let remaining = Math.max(0, Math.min(total, qty.ordered))
+  const changes: { id: string; done: number }[] = []
+
+  for (const line of qty.lines) {
+    const done = Math.min(line.ordered, remaining)
+    remaining -= done
+
+    if (done !== line.done) {
+      changes.push({ id: line.id, done })
+    }
+  }
+
+  return changes
 }

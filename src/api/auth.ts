@@ -9,7 +9,7 @@ if (!API_URL) {
 }
 // Interface representing the structure of the login response from the API
 export interface LoginResponse {
-  response: string
+  access: string
   refresh: string
 }
 
@@ -18,7 +18,6 @@ export async function login(
     username: string,
     password: string,
 ): Promise<LoginResponse> { // Ensure that the API URL is defined before making the request
-    console.log('Sending login request to:', `${API_URL}/api/token/`)
     const response = await fetch( // Define the API endpoint for login using the base API URL and the login path
         `${API_URL}/api/token/`, 
         {
@@ -39,6 +38,8 @@ export async function login(
             response.statusText,
             errorText
         )
+
+        throw new Error(`Login failed: ${response.status}`)
     }
 
     return response.json() as Promise<LoginResponse> // Parse the JSON response from the server and return it as a Promise of type LoginResponse

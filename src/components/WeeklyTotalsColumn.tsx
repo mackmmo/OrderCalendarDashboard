@@ -17,8 +17,8 @@ export function WeeklyTotalsColumn({
       : totals.fourPack
 
   return (
-    <div className="h-full border-l-2 border-stone-300 bg-stone-100 p-4">
-      <p className="text-sm font-bold uppercase tracking-wider text-stone-500">
+    <div className="h-full border-l-2 border-stone-300 bg-stone-100 p-3 lg:p-4">
+      <p className="text-xs font-bold uppercase tracking-wider text-stone-500 lg:text-sm">
         {sku} Week
       </p>
 
@@ -28,7 +28,7 @@ export function WeeklyTotalsColumn({
             Ordered
           </p>
 
-          <p className="text-3xl font-black tabular-nums text-stone-900">
+          <p className="text-2xl font-black lg:text-3xl tabular-nums text-stone-900">
             {selectedTotals.ordered}
           </p>
         </div>
@@ -38,7 +38,7 @@ export function WeeklyTotalsColumn({
             Finished
           </p>
 
-          <p className="text-3xl font-black tabular-nums text-stone-900">
+          <p className="text-2xl font-black lg:text-3xl tabular-nums text-stone-900">
             {selectedTotals.finished}
           </p>
         </div>
@@ -48,7 +48,7 @@ export function WeeklyTotalsColumn({
             Remaining
           </p>
 
-          <p className="text-3xl font-black tabular-nums text-stone-900">
+          <p className="text-2xl font-black lg:text-3xl tabular-nums text-stone-900">
             {selectedTotals.remaining}
           </p>
         </div>
@@ -65,33 +65,33 @@ export default function AnalyticsTotalsBar({
   totals: ProductTotals
 }) {
   return (
-    <div className="grid grid-cols-3 gap-4 border-b border-stone-300 bg-white px-6 py-4">
-      <div className="border-l-4 border-stone-800 bg-stone-100 px-5 py-3">
-        <p className="text-sm font-bold uppercase tracking-wider text-stone-500">
+    <div className="grid grid-cols-3 gap-2 border-b border-stone-300 bg-white px-3 py-2 md:gap-4 md:px-6 md:py-4">
+      <div className="min-w-0 border-l-4 border-stone-800 bg-stone-100 px-2 py-2 md:px-5 md:py-3">
+        <p className="truncate text-[10px] font-bold uppercase tracking-wider text-stone-500 md:text-sm">
           {sku} Ordered
         </p>
 
-        <p className="mt-1 text-4xl font-black tabular-nums text-stone-900">
+        <p className="mt-1 text-2xl font-black md:text-4xl tabular-nums text-stone-900">
           {totals.ordered}
         </p>
       </div>
 
-      <div className="border-l-4 border-stone-800 bg-stone-100 px-5 py-3">
-        <p className="text-sm font-bold uppercase tracking-wider text-stone-500">
+      <div className="min-w-0 border-l-4 border-stone-800 bg-stone-100 px-2 py-2 md:px-5 md:py-3">
+        <p className="truncate text-[10px] font-bold uppercase tracking-wider text-stone-500 md:text-sm">
           {sku} Finished
         </p>
 
-        <p className="mt-1 text-4xl font-black tabular-nums text-stone-900">
+        <p className="mt-1 text-2xl font-black md:text-4xl tabular-nums text-stone-900">
           {totals.finished}
         </p>
       </div>
 
-      <div className="border-l-4 border-stone-800 bg-stone-100 px-5 py-3">
-        <p className="text-sm font-bold uppercase tracking-wider text-stone-500">
+      <div className="min-w-0 border-l-4 border-stone-800 bg-stone-100 px-2 py-2 md:px-5 md:py-3">
+        <p className="truncate text-[10px] font-bold uppercase tracking-wider text-stone-500 md:text-sm">
           {sku} Remaining
         </p>
 
-        <p className="mt-1 text-4xl font-black tabular-nums text-stone-900">
+        <p className="mt-1 text-2xl font-black md:text-4xl tabular-nums text-stone-900">
           {totals.remaining}
         </p>
       </div>

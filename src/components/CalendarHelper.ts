@@ -93,6 +93,20 @@ export function fmtTime(date: Date) {
   })
 }
 
+// "2:05 PM" today, otherwise "Nov 17, 2:05 PM"
+export function fmtStamp(date: Date) {
+  const isToday = toKey(date) === toKey(new Date())
+
+  return isToday
+    ? fmtTime(date)
+    : date.toLocaleString([], {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+}
+
 export function fmtLongDate(date: Date) {
   const dayName = [
     'Sunday',

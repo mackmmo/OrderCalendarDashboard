@@ -1,196 +1,169 @@
-import { StoreOrder } from './Types.ts'
-import { Stepper }from './Stepper.tsx'
-import { StatusToggle } from '../components/StatusToggle'    
+import { useState } from 'react'
+import type { Qty, StatusField, StoreOrder } from './Types.ts'
+import { Stepper } from './Stepper.tsx'
+import { StatusToggle } from './StatusToggle.tsx'
+import { StatusBadge } from './StatusBadge.tsx'
 
 // ─── Order Card ───────────────────────────────────────────────────────────────
 
+export interface OrderCardHandlers {
+  onDoneChange: (qty: Qty, total: number) => Promise<void>
+  onStatusChange: (
+    order: StoreOrder,
+    field: StatusField,
+    value: boolean,
+  ) => Promise<void>
+}
+
+function ProductRow({
+  label,
+  qty,
+  disabled,
+  onChange,
+}: {
+  label: string
+  qty: Qty
+  disabled: boolean
+  onChange: (total: number) => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-4 py-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <span
+          className="w-12 flex-shrink-0 text-xs font-medium uppercase tracking-widest text-stone-500"
+          style={{ fontFamily: 'DM Mono, monospace' }}
+        >
+          {label}
+        </span>
+
+        <span className="whitespace-nowrap text-xs text-stone-400">
+          {qty.ordered} {qty.ordered === 1 ? 'pallet' : 'pallets'}
+        </span>
+      </div>
+
+      <div className="flex flex-shrink-0 items-center gap-2">
+        <Stepper
+          value={qty.done}
+          max={qty.ordered}
+          disabled={disabled}
+          onChange={onChange}
+        />
+      </div>
+    </div>
+  )
+}
+
 export default function OrderCard({
   order,
-  onFinishedQuantityChange,
-  onFinishedChange,
-  onShippedChange,
-}: {
-  order: StoreOrder
+  onDoneChange,
+  onStatusChange,
+}: { order: StoreOrder } & OrderCardHandlers) {
+  const [saving, setSaving] = useState(false)
 
-  onFinishedQuantityChange: (
-    orderId: number,
-    quantity: number,
-  ) => Promise<void>
+  async function run(action: () => Promise<void>) {
+    setSaving(true)
 
-  onFinishedChange: (
-    order: StoreOrder,
-    finished: boolean,
-  ) => Promise<void>
-
-  onShippedChange: (
-    order: StoreOrder,
-    shipped: boolean,
-  ) => Promise<void>
-}) {
-
-  async function setBsoDone(quantity: number) {
-  if (order.bso.orderId === null) {
-    return
+    try {
+      await action()
+    } finally {
+      setSaving(false)
+    }
   }
 
-  await onFinishedQuantityChange(
-    order.bso.orderId,
-    quantity,
-  )
-}
-
-async function setFourPackDone(quantity: number) {
-  if (order.fourPack.orderId === null) {
-    return
+  function toggle(field: StatusField, current: boolean) {
+    void run(() => onStatusChange(order, field, !current))
   }
-
-  await onFinishedQuantityChange(
-    order.fourPack.orderId,
-    quantity,
-  )
-}
-
-  async function toggleFinished() {
-  const nextFinished = !order.finishedAt
-
-  await onFinishedChange(
-    order,
-    nextFinished,
-  )
-}
-
-async function toggleShipped() {
-  const nextShipped = !order.shippedAt
-
-  await onShippedChange(
-    order,
-    nextShipped,
-  )
-}
 
   const totalOrdered = order.bso.ordered + order.fourPack.ordered
   const totalDone = order.bso.done + order.fourPack.done
-  const allDone = totalDone === totalOrdered
 
   return (
     <div
-      className={`border bg-white mb-3 transition-opacity ${
-        order.shippedAt ? 'opacity-60' : ''
+      className={`mb-3 border bg-white transition-opacity ${
+        order.status === 'done' ? 'opacity-70' : ''
       }`}
       style={{ borderColor: '#E0DDD8' }}
     >
       {/* Store header */}
       <div
-        className="px-4 py-2.5 border-b flex items-baseline justify-between"
+        className="flex items-start justify-between gap-3 border-b px-4 py-2.5"
         style={{ borderColor: '#E0DDD8' }}
       >
-        <span
-          className="font-semibold tracking-wide text-stone-900 uppercase text-base"
-          style={{ fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.08em' }}
-        >
-          {order.store}
-        </span>
-        <span
-          className="text-stone-400 text-xs tabular-nums"
-          style={{ fontFamily: 'DM Mono, monospace' }}
-        >
-          {totalDone}/{totalOrdered} pal
-          {allDone && !order.finishedAt && (
-            <span className="ml-2 text-stone-500">· all done</span>
-          )}
-        </span>
-      </div>
+        <div className="min-w-0">
+          <p
+            className="truncate text-base font-semibold uppercase tracking-wide text-stone-900"
+            style={{
+              fontFamily: 'Barlow Condensed, sans-serif',
+              letterSpacing: '0.08em',
+            }}
+          >
+            {order.store}
+          </p>
 
+          <p
+            className="text-[11px] text-stone-400 tabular-nums"
+            style={{ fontFamily: 'DM Mono, monospace' }}
+          >
+            SO {order.salesOrderNumbers.join(', ')} · {totalDone}/{totalOrdered} pal
+          </p>
+        </div>
+
+        <StatusBadge status={order.status} />
+      </div>
 
       {/* Product rows */}
-<div
-  className="divide-y"
-  style={{ borderColor: '#F0EDE8' }}
->
-  {order.bso.ordered > 0 && (
-    <div className="px-4 py-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span
-            className="w-8 text-xs font-medium uppercase tracking-widest text-stone-500"
-            style={{ fontFamily: 'DM Mono, monospace' }}
-          >
-            BSO
-          </span>
-
-          <span className="text-xs text-stone-400">
-            {order.bso.ordered}{' '}
-            {order.bso.ordered === 1 ? 'pallet' : 'pallets'} ordered
-          </span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-stone-400">
-            Done
-          </span>
-
-          <Stepper
-            value={order.bso.done}
-            max={order.bso.ordered}
-            onChange={(value) => {
-              void setBsoDone(value)
-            }}
+      <div className="divide-y divide-stone-100">
+        {order.bso.ordered > 0 && (
+          <ProductRow
+            label="BSO"
+            qty={order.bso}
+            disabled={saving}
+            onChange={(total) => void run(() => onDoneChange(order.bso, total))}
           />
-        </div>
-      </div>
-    </div>
-  )}
+        )}
 
-  {order.fourPack.ordered > 0 && (
-    <div className="px-4 py-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span
-            className="w-12 text-xs font-medium uppercase tracking-widest text-stone-500"
-            style={{ fontFamily: 'DM Mono, monospace' }}
-          >
-            4PAK
-          </span>
-
-          <span className="text-xs text-stone-400">
-            {order.fourPack.ordered}{' '}
-            {order.fourPack.ordered === 1 ? 'pallet' : 'pallets'} ordered
-          </span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-stone-400">
-            Done
-          </span>
-
-          <Stepper
-            value={order.fourPack.done}
-            max={order.fourPack.ordered}
-            onChange={(value) => {
-              void setFourPackDone(value)
-            }}
+        {order.fourPack.ordered > 0 && (
+          <ProductRow
+            label="4PAK"
+            qty={order.fourPack}
+            disabled={saving}
+            onChange={(total) => void run(() => onDoneChange(order.fourPack, total))}
           />
-        </div>
+        )}
       </div>
-    </div>
-  )}
-</div>
 
-      {/* Status toggles */}
+      {/* Status sign-offs */}
       <div
-        className="px-4 py-3 border-t space-y-0.5"
+        className="border-t px-4 py-2"
         style={{ borderColor: '#E0DDD8', backgroundColor: '#FAFAF8' }}
       >
         <StatusToggle
+          label="In Progress"
+          signOff={order.started}
+          disabled={saving}
+          onToggle={() => toggle('in_progress', !!order.started)}
+        />
+        <StatusToggle
           label="Order Finished"
-          timestamp={order.finishedAt}
-          onToggle={toggleFinished}
+          signOff={order.finished}
+          disabled={saving}
+          onToggle={() => toggle('finished', !!order.finished)}
         />
         <StatusToggle
           label="Order Shipped"
-          timestamp={order.shippedAt}
-          onToggle={toggleShipped}
+          signOff={order.shipped}
+          disabled={saving}
+          onToggle={() => toggle('shipped', !!order.shipped)}
         />
+
+        {order.qbDone && (
+          <p
+            className="pt-1.5 text-xs text-stone-500"
+            style={{ fontFamily: 'DM Mono, monospace' }}
+          >
+            Closed &amp; invoiced in QuickBooks
+          </p>
+        )}
       </div>
     </div>
   )

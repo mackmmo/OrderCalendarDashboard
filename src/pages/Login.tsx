@@ -1,69 +1,100 @@
-import { login } from '../api/auth';
-import React, { useState } from 'react';
+import { login } from '../api/auth'
+import React, { useState } from 'react'
 
+const inputClass =
+  'mt-1 block h-12 w-full border border-stone-300 bg-white px-3 text-base text-stone-900 outline-none focus:border-stone-900'
 
-export default function Login({ onLogin }: { onLogin: () => void }) { // Define the Login component for the Production Dashboard application
-    const [password, setPassword] = useState<string>(''); // State variable to hold the password input value. Default is an empty string. The type is explicitly set to string.
-    const [username, setUsername] = useState<string>(''); // State variable to hold the username input value. Default is an empty string. The type is explicitly set to string.
-    const [error, setError] = useState<string | null>(null); // State variable to hold any error messages. It can be a string or null. Default is null.
+export default function Login({ onLogin }: { onLogin: () => void }) {
+  const [username, setUsername] = useState<string>('')
+  const [password, setPassword] = useState<string>('')
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
-async function handleLogin( // Function to handle the login form submission
-    event: React.FormEvent<HTMLFormElement> //
-) {
-    event.preventDefault(); // Prevent the default form submission behavior
-    
+  async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
     try {
-        setError(null); // Reset any previous error messages
+      setError(null)
+      setSubmitting(true)
 
-        const tokens = await login( // Call the login function from the auth API with the provided username and password
-            username, 
-            password
-        ) // Call the login function with the provided username and password
-        
-        localStorage.setItem('accessToken', tokens.access); // Store the access token in local storage for future authenticated requests
-        localStorage.setItem('refreshToken', tokens.refresh); // Store the refresh token in local storage for future token refresh requests
+      const tokens = await login(username, password)
 
-        onLogin(); // Call the onLogin callback to notify the parent component that the user has successfully logged in
+      // Stored for authenticated API requests and token refresh
+      localStorage.setItem('accessToken', tokens.access)
+      localStorage.setItem('refreshToken', tokens.refresh)
 
-        console.log('Login successful:', tokens); // Log the successful login response to the console
-        console.log('access:', tokens.access)
-        console.log('refresh:', tokens.refresh)
+      onLogin()
     } catch (err) {
-        setError('Login failed. Please check your credentials and try again.'); // Set an error message if the login fails
-        console.error('Login error:', err); // Log the error to the console for debugging purposes
+      setError('Login failed. Please check your credentials and try again.')
+      console.error('Login error:', err)
+    } finally {
+      setSubmitting(false)
     }
-}
+  }
 
-return (
-    <div> 
-        <h1> Production Dashboard Login</h1>
+  return (
+    <div
+      className="flex min-h-full items-center justify-center px-4 py-10"
+      style={{ backgroundColor: '#F4F2EE' }}
+    >
+      <form
+        onSubmit={handleLogin}
+        className="w-full max-w-sm border bg-white p-6"
+        style={{ borderColor: '#E0DDD8' }}
+      >
+        <p
+          className="mb-1 text-xs uppercase tracking-widest text-stone-400"
+          style={{ fontFamily: 'DM Mono, monospace' }}
+        >
+          Production Dashboard
+        </p>
+        <h1
+          className="mb-6 text-2xl font-semibold uppercase tracking-wide text-stone-900"
+          style={{ fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.1em' }}
+        >
+          Sign In
+        </h1>
 
-        <form onSubmit={handleLogin}>
-            <label>
-                Username:   
-                <input
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value) // Update the username state variable when the input value changes
-                }
-              />
-            </label>
-            <label>
-                Password:
-                <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)
-                }
-              />
-            </label>
-            
-            {error && <p style={{ color: 'red' }}>{error}</p>} {/* Display error message if login fails */}
+        <label className="mb-4 block text-sm text-stone-600">
+          Username
+          <input
+            type="text"
+            autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            required
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className={inputClass}
+          />
+        </label>
 
-            <button type="submit">
-                Sign In
-            </button>
-        </form>
+        <label className="mb-4 block text-sm text-stone-600">
+          Password
+          <input
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={inputClass}
+          />
+        </label>
+
+        {error && (
+          <p role="alert" className="mb-4 text-sm text-red-700">
+            {error}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className="h-12 w-full bg-stone-900 text-sm font-bold uppercase tracking-wider text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {submitting ? 'Signing in…' : 'Sign In'}
+        </button>
+      </form>
     </div>
-)
+  )
 }

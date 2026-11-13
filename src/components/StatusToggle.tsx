@@ -1,41 +1,50 @@
-import { fmtTime } from './CalendarHelper.ts'
+import { fmtStamp } from './CalendarHelper.ts'
+import type { SignOff } from './Types.ts'
 
 // ─── Status Toggle ────────────────────────────────────────────────────────────
 
 export function StatusToggle({
   label,
-  timestamp,
+  signOff,
   onToggle,
+  disabled = false,
 }: {
   label: string
-  timestamp: Date | null
+  signOff: SignOff | null
   onToggle: () => void
+  disabled?: boolean
 }) {
-  const checked = !!timestamp
+  const checked = !!signOff
+
   return (
     <button
+      type="button"
       onClick={onToggle}
-      className="flex items-start gap-2.5 text-left w-full group py-1 hover:opacity-80 transition-opacity"
+      disabled={disabled}
+      aria-pressed={checked}
+      className="group flex min-h-11 w-full items-center gap-3 py-1.5 text-left transition-opacity hover:opacity-80 disabled:cursor-wait disabled:opacity-50"
     >
       <span
-        className={`mt-0.5 w-4 h-4 border flex-shrink-0 flex items-center justify-center transition-colors ${
+        className={`flex h-5 w-5 flex-shrink-0 items-center justify-center border transition-colors ${
           checked
-            ? 'bg-stone-900 border-stone-900'
+            ? 'border-stone-900 bg-stone-900'
             : 'border-stone-300 group-hover:border-stone-500'
         }`}
       >
         {checked && (
-          <span className="text-white text-[9px] leading-none font-bold">✓</span>
+          <span className="text-[10px] font-bold leading-none text-white">✓</span>
         )}
       </span>
-      <span className="text-sm text-stone-700">
-        {label}
-        {timestamp && (
+
+      <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+        <span className="text-sm text-stone-700">{label}</span>
+
+        {signOff && (
           <span
-            className="ml-2 text-stone-400 text-xs"
+            className="text-xs text-stone-400"
             style={{ fontFamily: 'DM Mono, monospace' }}
           >
-            {fmtTime(timestamp)}
+            {signOff.by ?? 'unknown'} · {fmtStamp(signOff.at)}
           </span>
         )}
       </span>
